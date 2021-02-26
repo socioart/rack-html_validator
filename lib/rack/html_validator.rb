@@ -1,28 +1,54 @@
 require "rack/html_validator/version"
 require "w3c_validators"
+require "erb"
 
 module Rack
   class HtmlValidator
+    include ERB::Util
+
     class Error < StandardError; end
     CONTENT_TYPE_KEY_PATTERN = /\Acontent-type\z/i.freeze
+    ERROR_PAGE_TEMPLATE = ::File.read("#{__dir__}/error_page_template.html.erb")
 
     class << self
       attr_accessor :enable
     end
 
+    attr_reader :app, :validator_uri, :async, :skip_if
+
     self.enable = true
 
-    def initialize(app)
+    def initialize(app, validator_uri, **options)
       @app = app
+      @validator_uri = validator_uri
+      @async = options.fetch(:async, false)
+      @skip_if = options[:skip_if]
     end
 
     def call(env)
       response = @app.call(env)
       return response unless self.class.enable
       return response unless html?(response)
-      return response unless (error_response = validate(response))
+      return response if skip_if&.call(env, response)
 
-      [500, {"Content-Type" => "text/plain; charset=utf-8"}, [error_response]]
+      if async
+        response_duprecated = response.deep_dup
+        Thread.new do
+          error_response = validate(response_duprecated)
+          if error_response
+            f = Tempfile.new(["html_validator", ".html"])
+            f.write(error_response)
+            f.close
+            system("open", f.path)
+          end
+        end
+
+        response
+      else
+        return response unless (error_response = validate(response))
+
+        [500, {"Content-Type" => "text/html; charset=utf-8"}, [error_response]]
+      end
     end
 
     private
@@ -40,7 +66,7 @@ module Rack
       body.each {|chunk| html << chunk }
       response[2] = [html]
 
-      validator = W3CValidators::NuValidator.new
+      validator = W3CValidators::NuValidator.new(validator_uri: validator_uri)
       results = validator.validate_text(html)
       return if results.errors.empty?
 
@@ -48,31 +74,7 @@ module Rack
     end
 
     def render_errors(errors, response)
-      buffer = "HTML Validation Failed (Rack::HtmlValidator)\n"
-      buffer << "==============================================\n"
-      buffer << "\n"
-      buffer << "# Errors\n"
-      buffer << "--\n"
-      errors.each do |error|
-        buffer << <<~TXT
-          Type: #{error.type}
-          Line: #{error.line}
-          Message: #{error.message}
-          Source: #{error.source}
-        TXT
-        buffer << "--\n"
-      end
-      buffer << "\n"
-      buffer << "# Source\n"
-      buffer << "Status: #{response[0]}\n"
-      buffer << "Header:\n"
-      response[1].each do |k, v|
-        buffer << "  #{k}: #{v}\n"
-      end
-      buffer << "Body:\n"
-      buffer << response[2].join
-      buffer << "\n"
-      buffer
+      ERB.new(ERROR_PAGE_TEMPLATE, trim_mode: "-").result(binding)
     end
   end
 end

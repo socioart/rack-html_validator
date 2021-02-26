@@ -19,14 +19,25 @@ And then execute:
 
 ## Usage
 
-For Rails application, create `config/initializers/rack-html_validator.rb`.
+For Rails application, create `config/initializers/rack-html_validator.rb` like below.
 
 ```ruby
 # rubocop:disable Naming/FileName
 case Rails.env
 when "development", "test"
+  begin
+    Net::HTTP.start("localhost", 8888) {
+      # noop
+    }
     require "rack/html_validator"
-    Rails.application.middleware.use Rack::HtmlValidator
+    Rails.application.middleware.use Rack::HtmlValidator, "http://localhost:8888/", async: true, skip_if: -> (env, (status, header, body)) {
+      status == 302 # skip validtion for redirection
+    }
+  rescue Errno::ECONNREFUSED
+    warn "=" * 120
+    warn "!!! HTML Validation Server not found. Please launch by `docker run -it --rm -p 8888:8888 validator/validator:latest` !!!"
+    warn "=" * 120
+  end
 end
 # rubocop:enable Naming/FileName
 ```
