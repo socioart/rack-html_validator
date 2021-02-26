@@ -1,6 +1,6 @@
 # Rack::HtmlValidator
 
-Rack::HtmlValidator is Rack middleware validates all HTML response. This is useful, but too slow... (eg. 35ms -> 800ms).
+Rack::HtmlValidator is Rack middleware validates all HTML response.
 
 
 ## Installation
@@ -26,10 +26,14 @@ For Rails application, create `config/initializers/rack-html_validator.rb` like 
 case Rails.env
 when "development", "test"
   begin
+    # Checking connection to Nu Validator
     Net::HTTP.start("localhost", 8888) {
       # noop
     }
     require "rack/html_validator"
+    # The first argument is a URI of Nu Validator (https://github.com/validator/validator)
+    # If set `async` option to true, validate asynchronous and automatically open result if fail.
+    # If `skip_if` is specified, call it before validation and skip validation if it returns `false`.
     Rails.application.middleware.use Rack::HtmlValidator, "http://localhost:8888/", async: true, skip_if: -> (env, (status, header, body)) {
       status == 302 # skip validtion for redirection
     }
