@@ -1,28 +1,35 @@
 # Rack::HtmlValidator
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/rack/html_validator`. To experiment with that code, run `bin/console` for an interactive prompt.
+Rack::HtmlValidator is Rack middleware validates all HTML response. This is useful, but too slow... (eg. 35ms -> 800ms).
 
-TODO: Delete this and the text above, and describe your gem
 
 ## Installation
 
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'rack-html_validator'
+group :development, :test do
+  gem "rack-html_validator", require: false, git: "https://github.com/socioart/rack-html_validator.git"
+end
 ```
 
 And then execute:
 
     $ bundle install
 
-Or install it yourself as:
-
-    $ gem install rack-html_validator
-
 ## Usage
 
-TODO: Write usage instructions here
+For Rails application, create `config/initializers/rack-html_validator.rb`.
+
+```ruby
+# rubocop:disable Naming/FileName
+case Rails.env
+when "development", "test"
+    require "rack/html_validator"
+    Rails.application.middleware.use Rack::HtmlValidator
+end
+# rubocop:enable Naming/FileName
+```
 
 ## Development
 
